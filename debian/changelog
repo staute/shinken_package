@@ -1,4 +1,4 @@
-shinken (2.4.2-1+PIC001 unstable; urgency=medium
+shinken (2.4.2-1+PIC001) unstable; urgency=medium
 
   * New upstream version (from https://github.com/naparuba/shinken.git [upstream_source/master])
 
