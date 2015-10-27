@@ -1,7 +1,7 @@
 Source: shinken
 Maintainer: PLANET IC GmbH <technik@planet-ic.de>
 XSBC-Original-Maintainer: Shinken Debian packages maintainers <pkg-shinken-maint@lists.alioth.debian.org>
-Uploaders: Thibault Cohen <thibault.cohen@savoirfairelinux.com>, Sebastien Coavoux <sebastien.coavoux@savoirfairelinux.com>, Stefan Taute <taute@planet-ic.de>
+Uploaders: Thibault Cohen <thibault.cohen@savoirfairelinux.com>, Sebastien Coavoux <sebastien.coavoux@savoirfairelinux.com>, Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>
 Section: net
 Priority: optional
 Vcs-Git: git://anonscm.debian.org/pkg-shinken/shinken.git
