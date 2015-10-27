@@ -1,3 +1,9 @@
+shinken (2.4.2-1+PIC001 unstable; urgency=medium
+
+  * New upstream version (from https://github.com/naparuba/shinken.git [upstream_source/master])
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Tue, 27 Oct 2015 10:45:33 +0100
+
 shinken (2.4.1-1+PIC001) unstable; urgency=medium
 
   * Changes to build Package for PLANET IC GmbH:
