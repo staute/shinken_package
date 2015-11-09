@@ -1,3 +1,11 @@
+shinken (2.4.2-1+PIC002) unstable; urgency=medium
+
+  * shinken-common.postinst-Skript angepasst:
+    - Skript prüft jetzt, ob der Server nur ein Poller bzw. ein Master ist.
+    - Dahingehend werden die zu startenden Shinken-Daemons im init.d-Skript angepasst.
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Mon, 09 Nov 2015 13:34:19 +0100
+
 shinken (2.4.2-1+PIC001) unstable; urgency=medium
 
   * New upstream version
