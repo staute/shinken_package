@@ -63,11 +63,11 @@ case "$1" in
             dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/realms.cfg /etc/shinken/realms/realms.cfg 2.4.2-1+PIC002 -- "$@"
         fi
 
-        if [[ `hostname` =~ "-poll-" ]]; then
-            sed -i "s/^AVAIL_MODULES=.*$/AVAIL_MODULES=\"poller\"/g" /etc/init.d/shinken
-        else
-            sed -i "s/^AVAIL_MODULES=.*$/AVAIL_MODULES=\"scheduler poller reactionner broker arbiter\"/g" /etc/init.d/shinken
-        fi
+        # Activate different modules by hostname
+        case `hostname` in
+            *poll*)  sed -i "s/^AVAIL_MODULES=.*$/AVAIL_MODULES=\"poller\"/g" /etc/init.d/shinken ;;
+            *)         sed -i "s/^AVAIL_MODULES=.*$/AVAIL_MODULES=\"scheduler poller reactionner broker arbiter\"/g" /etc/init.d/shinken ;;
+        esac
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
