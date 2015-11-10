@@ -1,3 +1,10 @@
+shinken (2.4.2-1+PIC003) unstable; urgency=medium
+
+  * Korrektur von shinken-common.postinst-Skript:
+    - Prüfung ob Poller oder Master schlug fehl.
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Tue, 10 Nov 2015 16:44:15 +0100
+
 shinken (2.4.2-1+PIC002) unstable; urgency=medium
 
   * shinken-common.postinst-Skript angepasst:

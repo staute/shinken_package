@@ -54,13 +54,13 @@ case "$1" in
 
         # Move old config files
         if dpkg-maintscript-helper supports mv_conffile 2>/dev/null; then
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/arbiter.cfg /etc/shinken/arbiters/arbiter.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/broker.cfg /etc/shinken/brokers/broker.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/poller.cfg /etc/shinken/pollers/poller.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/scheduler.cfg /etc/shinken/schedulers/scheduler.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/reactionner.cfg /etc/shinken/reactionners/reactionner.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/receiver.cfg /etc/shinken/receivers/receiver.cfg 2.4.2-1+PIC002 -- "$@"
-            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/realms.cfg /etc/shinken/realms/realms.cfg 2.4.2-1+PIC002 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/arbiter.cfg /etc/shinken/arbiters/arbiter.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/broker.cfg /etc/shinken/brokers/broker.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/poller.cfg /etc/shinken/pollers/poller.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/scheduler.cfg /etc/shinken/schedulers/scheduler.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/reactionner.cfg /etc/shinken/reactionners/reactionner.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/receiver.cfg /etc/shinken/receivers/receiver.cfg 2.4.2-1+PIC003 -- "$@"
+            dpkg-maintscript-helper mv_conffile /etc/shinken/shinken-specific/realms.cfg /etc/shinken/realms/realms.cfg 2.4.2-1+PIC003 -- "$@"
         fi
 
         # Activate different modules by hostname
