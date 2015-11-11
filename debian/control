@@ -34,7 +34,7 @@ Replaces: shinken-arbiter, shinken-broker, shinken-discovery,
  shinken-poller, shinken-reactionner, shinken-receiver,
  shinken-scheduler, shinken-core
 Depends: ${misc:Depends}, python, python-pycurl, python-openssl, adduser
-Recommends: monitoring-plugins-basic, bsd-mailx | mailx, python-cherrypy3
+Recommends: monitoring-plugins-basic, bsd-mailx | mailx, python-cherrypy
 Description: Flexible monitoring tool - Common files
  Common files for shinken monitoring.
  .

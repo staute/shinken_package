@@ -1,3 +1,11 @@
+shinken (2.4.2-1+PIC004) unstable; urgency=medium
+
+  * shinken-common empfiehlt nun python-cherrypy anstatt python-cherrypy3
+    - python-cherrypy3 hat Probleme gemacht bei der Kommunikation zum 
+      Scheduler (timeouts)
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Wed, 11 Nov 2015 14:35:10 +0100
+
 shinken (2.4.2-1+PIC003) unstable; urgency=medium
 
   * Korrektur von shinken-common.postinst-Skript:
