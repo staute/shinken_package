@@ -177,7 +177,8 @@ class Host(SchedulingItem):
         'realm':
             StringProp(default=None, fill_brok=['full_status'], conf_send_preparation=get_obj_name),
         'poller_tag':
-            StringProp(default='None'),
+            #StringProp(default='None'),
+            StringProp(default=None, fill_brok=['full_status'], conf_send_preparation=get_obj_name),
         'reactionner_tag':
             StringProp(default='None'),
         'resultmodulations':

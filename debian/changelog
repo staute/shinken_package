@@ -1,3 +1,14 @@
+shinken (2.4.2-1+PIC005) unstable; urgency=medium
+
+  * python-cherrypy wird nicht verwendet, daher Paket wieder aus den
+    Recommends entfernt
+  * python-crypto als Abhängigkeit hinzugefügt
+  * objects/host.py und objects/service.py angepasst
+    - liefern nun korrekt den poller_tag an das Livestatus-Modul
+  * /var/run/shinken wird nun mit angelegt
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Tue, 15 Dec 2015 10:46:07 +0100
+
 shinken (2.4.2-1+PIC004) unstable; urgency=medium
 
   * shinken-common empfiehlt nun python-cherrypy anstatt python-cherrypy3

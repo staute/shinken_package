@@ -5,3 +5,4 @@ var/lib/shinken/share
 var/lib/shinken/doc
 var/lib/shinken/inventory
 var/lib/shinken/spool
+var/run/shinken

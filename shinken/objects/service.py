@@ -166,7 +166,8 @@ class Service(SchedulingItem):
 
         # Shinken specific
         'poller_tag':
-            StringProp(default='None'),
+            #StringProp(default='None'),
+            StringProp(default=None, fill_brok=['full_status']),
         'reactionner_tag':
             StringProp(default='None'),
         'resultmodulations':
