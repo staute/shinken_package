@@ -41,6 +41,7 @@ from shinken.external_command import ExternalCommand, ExternalCommandManager
 from shinken.http_client import HTTPExceptions
 from shinken.daemon import Interface
 from shinken.stats import statsmgr
+from shinken.util import parse_memory_expr, free_memory
 
 class IStats(Interface):
     """
@@ -62,8 +63,8 @@ They connect here and get all broks (data for brokers). Data must be ORDERED!
 (initial status BEFORE update...) """
 
     # A broker ask us broks
-    def get_broks(self, bname):
-        res = self.app.get_broks()
+    def get_broks(self, bname, broks_batch=0):
+        res = self.app.get_broks(broks_batch)
         return base64.b64encode(zlib.compress(cPickle.dumps(res), 2))
     get_broks.encode = 'raw'
 
@@ -122,7 +123,7 @@ class Receiver(Satellite):
         if cls_type == 'brok':
             # For brok, we TAG brok with our instance_id
             elt.instance_id = 0
-            self.broks[elt.id] = elt
+            self.broks.append(elt)
             return
         elif cls_type == 'externalcommand':
             logger.debug("Enqueuing an external command: %s", str(ExternalCommand.__dict__))
@@ -169,7 +170,6 @@ class Receiver(Satellite):
 
     def setup_new_conf(self):
         conf = self.new_conf
-        self.new_conf = None
         self.cur_conf = conf
         # Got our name from the globals
         if 'receiver_name' in conf['global']:
@@ -184,11 +184,31 @@ class Receiver(Satellite):
         self.statsd_port = conf['global']['statsd_port']
         self.statsd_prefix = conf['global']['statsd_prefix']
         self.statsd_enabled = conf['global']['statsd_enabled']
+        self.statsd_interval = conf['global']['statsd_interval']
+        self.statsd_types = conf['global']['statsd_types']
+        self.statsd_pattern = conf['global']['statsd_pattern']
+        self.harakiri_threshold = parse_memory_expr(
+            conf['global']['harakiri_threshold'])
+
+        if self.harakiri_threshold is not None:
+            self.raw_conf = self.new_conf
+        else:
+            self.raw_conf = None
+        self.new_conf = None
+        if self.aggressive_memory_management:
+            free_memory()
 
         statsmgr.register(self, self.name, 'receiver',
-                          api_key=self.api_key, secret=self.secret, http_proxy=self.http_proxy,
-                          statsd_host=self.statsd_host, statsd_port=self.statsd_port,
-                          statsd_prefix=self.statsd_prefix, statsd_enabled=self.statsd_enabled)
+                          api_key=self.api_key,
+                          secret=self.secret,
+                          http_proxy=self.http_proxy,
+                          statsd_host=self.statsd_host,
+                          statsd_port=self.statsd_port,
+                          statsd_prefix=self.statsd_prefix,
+                          statsd_enabled=self.statsd_enabled,
+                          statsd_interval=self.statsd_interval,
+                          statsd_types=self.statsd_types,
+                          statsd_pattern=self.statsd_pattern)
         logger.load_obj(self, name)
         self.direct_routing = conf['global']['direct_routing']
         self.accept_passive_unknown_check_results = \
@@ -337,6 +357,9 @@ class Receiver(Satellite):
         # When it push us conf, we reinit connections
         self.watch_for_new_conf(0.0)
         if self.new_conf:
+            if self.graceful_enabled and self.switch_process() is True:
+                # Child successfully spawned, we're exiting
+                return
             self.setup_new_conf()
 
         # Maybe external modules raised 'objects'
@@ -348,6 +371,9 @@ class Receiver(Satellite):
         # print "watch new conf 1: begin", len(self.broks)
         self.watch_for_new_conf(1.0)
         # print "get enw broks watch new conf 1: end", len(self.broks)
+
+        # Checks if memory consumption did not exceed allowed thresold
+        self.check_memory_usage()
 
 
     #  Main function, will loop forever
@@ -363,6 +389,7 @@ class Receiver(Satellite):
 
             # Look if we are enabled or not. If ok, start the daemon mode
             self.look_for_early_exit()
+            self.load_parent_config()
 
             for line in self.get_header():
                 logger.info(line)
@@ -409,14 +436,8 @@ class Receiver(Satellite):
 
     # stats threads is asking us a main structure for stats
     def get_stats_struct(self):
-        now = int(time.time())
         # call the daemon one
         res = super(Receiver, self).get_stats_struct()
         res.update({'name': self.name, 'type': 'receiver',
                     'direct_routing': self.direct_routing})
-        metrics = res['metrics']
-        # metrics specific
-        metrics.append('receiver.%s.external-commands.queue %d %d' % (
-            self.name, len(self.external_commands), now))
-
         return res

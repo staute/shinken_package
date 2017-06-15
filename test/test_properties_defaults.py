@@ -197,6 +197,8 @@ class TestConfig(PropertiesTester, ShinkenTest):
         ('broker_module', ''),
         ('modified_attributes', 0L),
         ('daemon_enabled', True),
+        ('graceful_enabled', False),
+        ('aggressive_memory_management', False),
 
         # Shinken specific
         ('idontcareaboutsecurity', False),
@@ -243,6 +245,9 @@ class TestConfig(PropertiesTester, ShinkenTest):
         ('statsd_port', 8125),
         ('statsd_prefix', 'shinken'),
         ('statsd_enabled', False),
+        ('statsd_interval', 5),
+        ('statsd_types', None),
+        ('statsd_pattern', None),
         ])
 
     def setUp(self):
@@ -267,6 +272,7 @@ class TestCommand(PropertiesTester, ShinkenTest):
         ('module_type', None),
         ('timeout', -1),
         ('enable_environment_macros', False),
+        ('priority', 100),
         ])
 
     def setUp(self):
@@ -278,7 +284,7 @@ class TestContactgroup(PropertiesTester, ShinkenTest):
 
     unused_props = []
 
-    without_default = ['contactgroup_name', 'alias']
+    without_default = ['contactgroup_name', 'contactgroup_members', 'alias']
 
     properties = dict([
         ('members', None),
@@ -487,7 +493,7 @@ class TestHostgroup(PropertiesTester, ShinkenTest):
 
     unused_props = []
 
-    without_default = ['hostgroup_name', 'alias']
+    without_default = ['hostgroup_name', 'hostgroup_members', 'alias']
 
     properties = dict([
         ('members', None),
@@ -594,6 +600,7 @@ class TestHost(PropertiesTester, ShinkenTest):
         ('snapshot_criteria', ['d','u']),
         ('business_rule_host_notification_options', []),
         ('business_rule_service_notification_options', []),
+        ('priority', 100),
         ])
 
     def setUp(self):
@@ -795,7 +802,7 @@ class TestServicegroup(PropertiesTester, ShinkenTest):
 
     unused_props = []
 
-    without_default = ['servicegroup_name', 'alias']
+    without_default = ['servicegroup_name', 'servicegroup_members', 'alias']
 
     properties = dict([
         ('members', None),
@@ -899,6 +906,7 @@ class TestService(PropertiesTester, ShinkenTest):
         ('business_rule_host_notification_options', []),
         ('business_rule_service_notification_options', []),
         ('host_dependency_enabled', True),
+        ('priority', 100),
         ])
 
     def setUp(self):

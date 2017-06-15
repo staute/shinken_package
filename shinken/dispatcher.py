@@ -410,6 +410,7 @@ class Dispatcher:
                             'skip_initial_broks': sched.skip_initial_broks,
                             'accept_passive_unknown_check_results':
                                 sched.accept_passive_unknown_check_results,
+                            'harakiri_threshold': sched.harakiri_threshold,
                             # shiken.io part
                             'api_key': self.conf.api_key,
                             'secret': self.conf.secret,
@@ -421,6 +422,9 @@ class Dispatcher:
                             'statsd_port': self.conf.statsd_port,
                             'statsd_prefix': self.conf.statsd_prefix,
                             'statsd_enabled': self.conf.statsd_enabled,
+                            'statsd_interval': self.conf.statsd_interval,
+                            'statsd_types': self.conf.statsd_types,
+                            'statsd_pattern': self.conf.statsd_pattern,
                         }
 
                         t1 = time.time()

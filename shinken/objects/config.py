@@ -535,6 +535,12 @@ class Config(Item):
         'daemon_enabled':
             BoolProp(default=True),  # Put to 0 to disable the arbiter to run
 
+        'graceful_enabled':
+            BoolProp(default=False),
+
+        'aggressive_memory_management':
+            BoolProp(default=False),
+
         'daemon_thread_pool_size':
             IntegerProp(default=16),
 
@@ -652,6 +658,21 @@ class Config(Item):
                                    class_inherit=[(SchedulerLink, None), (ReactionnerLink, None),
                                                   (BrokerLink, None), (PollerLink, None),
                                                   (ReceiverLink, None),  (ArbiterLink, None)]),
+        'statsd_interval':
+            IntegerProp(default=5,
+                        class_inherit=[(SchedulerLink, None), (ReactionnerLink, None),
+                                       (BrokerLink, None), (PollerLink, None),
+                                       (ReceiverLink, None),  (ArbiterLink, None)]),
+        'statsd_types':
+            StringProp(default=None,
+                       class_inherit=[(SchedulerLink, None), (ReactionnerLink, None),
+                                      (BrokerLink, None), (PollerLink, None),
+                                      (ReceiverLink, None),  (ArbiterLink, None)]),
+        'statsd_pattern':
+            StringProp(default=None,
+                       class_inherit=[(SchedulerLink, None), (ReactionnerLink, None),
+                                      (BrokerLink, None), (PollerLink, None),
+                                      (ReceiverLink, None),  (ArbiterLink, None)]),
     }
 
     macros = {
@@ -2021,11 +2042,6 @@ class Config(Item):
         self.discoveryrules.remove_templates()
         self.discoveryruns.remove_templates()
 
-
-    # We will compute simple element md5hash, so we can know
-    # if they changed or not between the restart
-    def compute_hash(self):
-        self.hosts.compute_hash()
 
 
     # Add an error in the configuration error list so we can print them

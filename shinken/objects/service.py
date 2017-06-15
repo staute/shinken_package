@@ -29,6 +29,7 @@ If you look at the scheduling part, look at the scheduling item class"""
 import time
 import re
 import itertools
+import uuid
 
 try:
     from ClusterShell.NodeSet import NodeSet, NodeSetParseRangeError
@@ -256,6 +257,9 @@ class Service(SchedulingItem):
         'snapshot_interval':
             IntegerProp(default=5),
 
+        # Check/notification priority
+        'priority':
+            IntegerProp(default=100, fill_brok=['full_status']),
     })
 
     # properties used in the running state
@@ -548,6 +552,12 @@ class Service(SchedulingItem):
 #                         __/ |
 #                        |___/
 ######
+
+    def get_newid(self):
+        cls = self.__class__
+        value = uuid.uuid1().hex
+        cls.id += 1
+        return value
 
     def __repr__(self):
         return '<Service host_name=%r desc=%r name=%r use=%r />' % (
@@ -1379,7 +1389,11 @@ class Services(Items):
         for i in itertools.chain(self.items.itervalues(),
                                  self.templates.itervalues()):
             self.linkify_item_templates(i)
-        for i in self:
+
+        # Then we set the tags issued from the built templates
+        # for i in self:
+        for i in itertools.chain(self.items.itervalues(),
+                                 self.templates.itervalues()):
             i.tags = self.get_all_tags(i)
 
 
@@ -1554,7 +1568,7 @@ class Services(Items):
         for prop in ('contacts', 'contact_groups', 'notification_interval',
                      'notification_period', 'resultmodulations', 'business_impact_modulations',
                      'escalations', 'poller_tag', 'reactionner_tag', 'check_period',
-                     'business_impact', 'maintenance_period'):
+                     'business_impact', 'maintenance_period', 'priority'):
             for s in self:
                 if not hasattr(s, prop) and hasattr(s, 'host_name'):
                     h = hosts.find_by_name(s.host_name)

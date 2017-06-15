@@ -25,12 +25,10 @@
 import sys
 import os
 import time
-import traceback
 import socket
 import traceback
 import cStringIO
 import cPickle
-import copy
 import json
 
 from shinken.objects.config import Config
@@ -42,7 +40,7 @@ from shinken.stats import statsmgr
 from shinken.brok import Brok
 from shinken.external_command import ExternalCommand
 from shinken.property import BoolProp
-from shinken.util import jsonify_r
+from shinken.util import jsonify_r, get_memory, free_memory
 
 # Interface for the other Arbiter
 # It connects, and together we decide who's the Master and who's the Slave, etc.
@@ -176,13 +174,14 @@ class Arbiter(Daemon):
         super(Arbiter, self).__init__('arbiter', config_files[0], is_daemon, do_replace,
                                       debug, debug_file)
 
+        self.graceful_enabled = False
         self.config_files = config_files
         self.verify_only = verify_only
         self.analyse = analyse
         self.migrate = migrate
         self.arb_name = arb_name
 
-        self.broks = {}
+        self.broks = []
         self.is_master = False
         self.me = None
 
@@ -204,7 +203,7 @@ class Arbiter(Daemon):
     # Use for adding things like broks
     def add(self, b):
         if isinstance(b, Brok):
-            self.broks[b.id] = b
+            self.broks.append(b)
         elif isinstance(b, ExternalCommand):
             self.external_commands.append(b)
         else:
@@ -217,13 +216,18 @@ class Arbiter(Daemon):
     # TODO: better find the broker, here it can be dead?
     # or not the good one?
     def push_broks_to_broker(self):
-        for brk in self.conf.brokers:
-            # Send only if alive of course
-            if brk.manage_arbiters and brk.alive:
-                is_send = brk.push_broks(self.broks)
+        brokers = self.conf.brokers
+        for brk in [b for b in brokers if b.manage_arbiters and b.alive]:
+            while len(self.broks) > 0:
+                if brk.broks_batch > 0:
+                    count = len(self.broks)
+                else:
+                    count = min(brk.broks_batch, len(self.broks))
+                is_send = brk.push_broks(self.broks[:count])
                 if is_send:
                     # They are gone, we keep none!
-                    self.broks.clear()
+                    del self.broks[:count]
+                    statsmgr.incr('core.arbiter.broks.out', count, 'queue')
 
     # We must take external_commands from all satellites
     # like brokers, pollers, reactionners or receivers
@@ -246,6 +250,9 @@ class Arbiter(Daemon):
         for tab in tabs:
             for s in tab:
                 new_broks = s.get_all_broks()
+                _type = s.my_type
+                statsmgr.incr('core.arbiter.broks.in.%s' % _type,
+                              len(new_broks), 'queue')
                 for b in new_broks:
                     self.add(b)
 
@@ -302,12 +309,19 @@ class Arbiter(Daemon):
                 http_proxy = getattr(self.conf, 'http_proxy', '')
                 statsd_host = getattr(self.conf, 'statsd_host', 'localhost')
                 statsd_port = getattr(self.conf, 'statsd_port', 8125)
+                statsd_interval = getattr(self.conf, 'statsd_interval', 5)
                 statsd_prefix = getattr(self.conf, 'statsd_prefix', 'shinken')
                 statsd_enabled = getattr(self.conf, 'statsd_enabled', False)
+                statsd_types = getattr(self.conf, 'statsd_types', None)
+                statsd_pattern = getattr(self.conf, 'statsd_pattern', '')
                 statsmgr.register(self, arb.get_name(), 'arbiter',
                                   api_key=api_key, secret=secret, http_proxy=http_proxy,
                                   statsd_host=statsd_host, statsd_port=statsd_port,
-                                  statsd_prefix=statsd_prefix, statsd_enabled=statsd_enabled)
+                                  statsd_prefix=statsd_prefix,
+                                  statsd_enabled=statsd_enabled,
+                                  statsd_interval=statsd_interval,
+                                  statsd_types=statsd_types,
+                                  statsd_pattern=statsd_pattern)
 
                 # Set myself as alive ;)
                 self.me.alive = True
@@ -376,9 +390,6 @@ class Arbiter(Daemon):
 
         # Remove templates from config
         self.conf.remove_templates()
-
-        # We compute simple item hash
-        self.conf.compute_hash()
 
         # Overrides sepecific service instaces properties
         self.conf.override_properties()
@@ -508,7 +519,7 @@ class Arbiter(Daemon):
                     logger.error("Back trace of this remove: %s", output.getvalue())
                     output.close()
                     continue
-                statsmgr.incr('hook.get-objects', time.time() - _t)
+                statsmgr.timing('hook.get-objects', time.time() - _t, 'perf')
                 types_creations = self.conf.types_creations
                 for k in types_creations:
                     (cls, clss, prop, dummy) = types_creations[k]
@@ -645,6 +656,8 @@ class Arbiter(Daemon):
         self.new_conf = None
         self.cur_conf = conf
         self.conf = conf
+        if self.aggressive_memory_management:
+            free_memory()
         for arb in self.conf.arbiters:
             if (arb.address, arb.port) == (self.host, self.port):
                 self.me = arb
@@ -803,20 +816,20 @@ class Arbiter(Daemon):
             # Now the dispatcher job
             _t = time.time()
             self.dispatcher.check_alive()
-            statsmgr.incr('core.check-alive', time.time() - _t)
+            statsmgr.timing('core.arbiter.check-alive', time.time() - _t, 'perf')
 
             _t = time.time()
             self.dispatcher.check_dispatch()
-            statsmgr.incr('core.check-dispatch', time.time() - _t)
+            statsmgr.timing('core.arbiter.check-dispatch', time.time() - _t, 'perf')
 
             # REF: doc/shinken-conf-dispatching.png (3)
             _t = time.time()
             self.dispatcher.dispatch()
-            statsmgr.incr('core.dispatch', time.time() - _t)
+            statsmgr.timing('core.arbiter.dispatch', time.time() - _t, 'perf')
 
             _t = time.time()
             self.dispatcher.check_bad_dispatch()
-            statsmgr.incr('core.check-bad-dispatch', time.time() - _t)
+            statsmgr.timing('core.arbiter.check-bad-dispatch', time.time() - _t, 'perf')
 
             # Now get things from our module instances
             self.get_objects_from_from_queues()
@@ -837,7 +850,8 @@ class Arbiter(Daemon):
 
             _t = time.time()
             self.push_external_commands_to_schedulers()
-            statsmgr.incr('core.push-external-commands', time.time() - _t)
+            statsmgr.timing('core.arbiter.push-external-commands', time.time() - _t,
+                            'perf')
 
             # It's sent, do not keep them
             # TODO: check if really sent. Queue by scheduler?
@@ -868,8 +882,25 @@ class Arbiter(Daemon):
     def restore_retention_data(self, data):
         broks = data['broks']
         external_commands = data['external_commands']
-        self.broks.update(broks)
+        self.broks.extend(broks)
         self.external_commands.extend(external_commands)
+
+
+    # Gets internal metrics for both statsd and
+    def get_internal_metrics(self):
+        # Queues
+        metrics = [
+            ('core.arbiter.mem', get_memory(), 'system'),
+            ('core.arbiter.external-commands.queue',
+             len(self.external_commands), 'queue'),
+            ('core.arbiter.broks.queue', len(self.broks), 'queue'),
+        ]
+        # Objects
+        for t in ("contacts", "contactgroups", "hosts", "hostgroups",
+                  "services", "servicegroups", "commands"):
+            count = len(getattr(self.conf, t))
+            metrics.append(('core.arbiter.%s' % t, count, 'object'))
+        return metrics
 
 
     # stats threads is asking us a main structure for stats
@@ -878,11 +909,17 @@ class Arbiter(Daemon):
         # call the daemon one
         res = super(Arbiter, self).get_stats_struct()
         res.update({'name': self.me.get_name(), 'type': 'arbiter'})
-        res['hosts'] = len(self.conf.hosts)
-        res['services'] = len(self.conf.services)
+
+        # Managed objects
+        res["objects"] = {}
+        for t in ("contacts", "contactgroups", "hosts", "hostgroups",
+                  "services", "servicegroups", "commands"):
+            res["objects"][t] = len(getattr(self.conf, t))
+
+        # Metrics specific
         metrics = res['metrics']
-        # metrics specific
-        metrics.append('arbiter.%s.external-commands.queue %d %d' %
-                       (self.me.get_name(), len(self.external_commands), now))
+        for metric in self.get_internal_metrics():
+            name, value, mtype = metric
+            metrics.append(name, value, now, mtype)
 
         return res
