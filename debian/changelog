@@ -1,3 +1,11 @@
+shinken (2.4.3-1+PIC001) unstable; urgency=medium
+
+  * New upstream release
+  * /etc/init.d/shinken creates now $VAR and $RUN if not exist
+  * /etc/default/shinken set now SHINKENUSER-VARs
+
+ -- Stefan Taute (PLANET IC GmbH) <taute@planet-ic.de>  Fri, 16 Jun 2017 14:27:32 +0200
+
 shinken (2.4.2-1+PIC005) unstable; urgency=medium
 
   * python-cherrypy wird nicht verwendet, daher Paket wieder aus den
