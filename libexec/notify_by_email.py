@@ -18,6 +18,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with Shinken.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 import sys
 import socket
@@ -205,6 +207,9 @@ def create_mail(format):
     logging.debug('Subject: %s' % (opts.prefix + get_mail_subject(opts.notification_object)))
     msg['Subject'] = opts.prefix + get_mail_subject(opts.notification_object)
 
+    msg['Precedence'] = 'bulk'
+    msg['Auto-Submitted'] = 'auto-generated'
+
     return msg
 
 #############################################################################
@@ -225,7 +230,7 @@ def create_txt_message(msg):
 
     txt_content = '\r\n'.join(txt_content)
 
-    msgText = MIMEText(txt_content, 'text')
+    msgText = MIMEText(txt_content, 'plain')
     msg.attach(msgText)
 
     return msg
@@ -290,10 +295,10 @@ th.customer {width: 600px; background-color: #004488; color: #ffffff;}\r
     for k,v in sorted(shinken_var.iteritems()):
         logging.debug('type %s : %s' % (k, type(v)))
         if odd:
-            html_content.append('<tr><th class="odd">' + k + '</th><td class="odd">' + v + '</td></tr>')
+            html_content.append('<tr><th class="odd">' + str(k) + '</th><td class="odd">' + str(v) + '</td></tr>')
             odd=False
         else:
-            html_content.append('<tr><th class="even">' + k + '</th><td class="even">' + v + '</td></tr>')
+            html_content.append('<tr><th class="even">' + str(k) + '</th><td class="even">' + str(v) + '</td></tr>')
             odd=True
 
     html_content.append('</table>')

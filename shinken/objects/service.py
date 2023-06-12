@@ -26,10 +26,13 @@
 """ This Class is the service one, s it manage all service specific thing.
 If you look at the scheduling part, look at the scheduling item class"""
 
-import time
-import re
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import six
 import itertools
+import time
 import uuid
+import re
 
 try:
     from ClusterShell.NodeSet import NodeSet, NodeSetParseRangeError
@@ -53,11 +56,7 @@ from shinken.util import filter_service_by_regex_name
 from shinken.util import filter_service_by_host_name
 
 
-class Service(SchedulingItem):
-    # AutoSlots create the __slots__ with properties and
-    # running_properties names
-    __metaclass__ = AutoSlots
-
+class Service(six.with_metaclass(AutoSlots, SchedulingItem)):
     # Every service have a unique ID, and 0 is always special in
     # database and co...
     id = 1
@@ -82,7 +81,7 @@ class Service(SchedulingItem):
         'service_description':
             StringProp(fill_brok=['full_status', 'check_result', 'next_schedule']),
         'display_name':
-            StringProp(default='', fill_brok=['full_status']),
+            StringProp(default='', fill_brok=['full_status'], no_slots=True),
         'servicegroups':
             ListProp(default=[], fill_brok=['full_status'],
                      brok_transformation=to_list_string_of_names, merging='join'),
@@ -257,6 +256,20 @@ class Service(SchedulingItem):
         'snapshot_interval':
             IntegerProp(default=5),
 
+        # Maintenance part
+        'maintenance_check_command':
+            StringProp(default='', fill_brok=['full_status']),
+        'maintenance_period':
+            StringProp(default='', brok_transformation=to_name_if_possible, fill_brok=['full_status']),
+        'maintenance_checks_enabled':
+            BoolProp(default=False, fill_brok=['full_status']),
+        'maintenance_check_period':
+            StringProp(default='', brok_transformation=to_name_if_possible, fill_brok=['full_status']),
+        'maintenance_check_interval':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result']),
+        'maintenance_retry_interval':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result']),
+
         # Check/notification priority
         'priority':
             IntegerProp(default=100, fill_brok=['full_status']),
@@ -266,14 +279,11 @@ class Service(SchedulingItem):
     running_properties = SchedulingItem.running_properties.copy()
     running_properties.update({
         'modified_attributes':
-            IntegerProp(default=0L, fill_brok=['full_status'], retention=True),
+            IntegerProp(default=0, fill_brok=['full_status'], retention=True),
         'last_chk':
             IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
         'next_chk':
             IntegerProp(default=0, fill_brok=['full_status', 'next_schedule'], retention=True),
-        'in_checking':
-            BoolProp(default=False,
-                     fill_brok=['full_status', 'check_result', 'next_schedule'], retention=True),
         'in_maintenance':
             IntegerProp(default=None, fill_brok=['full_status'], retention=True),
         'latency':
@@ -356,7 +366,7 @@ class Service(SchedulingItem):
         'percent_state_change':
             FloatProp(default=0.0, fill_brok=['full_status', 'check_result'], retention=True),
         'problem_has_been_acknowledged':
-            BoolProp(default=False, fill_brok=['full_status', 'check_result'], retention=True),
+            BoolProp(default=False, fill_brok=['full_status', 'check_result']),
         'acknowledgement':
             StringProp(default=None, retention=True),
         'acknowledgement_type':
@@ -386,7 +396,7 @@ class Service(SchedulingItem):
         'check_flapping_recovery_notification':
             BoolProp(default=True, fill_brok=['full_status'], retention=True),
         'scheduled_downtime_depth':
-            IntegerProp(default=0, fill_brok=['full_status'], retention=True),
+            IntegerProp(default=0, fill_brok=['full_status']),
         'pending_flex_downtime':
             IntegerProp(default=0, fill_brok=['full_status'], retention=True),
         'timeout':
@@ -415,7 +425,7 @@ class Service(SchedulingItem):
                                        retention=True,
                                        retention_preparation=to_list_of_names),
         'in_scheduled_downtime': BoolProp(
-            default=False, fill_brok=['full_status', 'check_result'], retention=True),
+            default=False, fill_brok=['full_status', 'check_result']),
         'in_scheduled_downtime_during_last_check': BoolProp(default=False, retention=True),
         'actions':            ListProp(default=[]),  # put here checks and notif raised
         'broks':              ListProp(default=[]),  # and here broks raised
@@ -479,6 +489,23 @@ class Service(SchedulingItem):
         # Keep the string of the last command launched for this element
         'last_check_command': StringProp(default=''),
 
+        # Maintenance states: PRODUCTION (0), MAINTENANCE (1), UNKNOWN (2)
+        'last_maintenance_chk':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'next_maintenance_chk':
+            IntegerProp(default=0, fill_brok=['full_status', 'next_schedule'], retention=True),
+        'maintenance_check_output':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'maintenance_state':
+            StringProp(default='PENDING', fill_brok=['full_status', 'check_result'], retention=True),
+        'maintenance_state_id':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state':
+            StringProp(default='PENDING', fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state_id':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state_change':
+            FloatProp(default=0.0, fill_brok=['full_status', 'check_result'], retention=True),
     })
 
     # Mapping between Macros and properties (can be prop or a function)
@@ -671,7 +698,7 @@ class Service(SchedulingItem):
                     state = False  # Bad boy...
 
         # Then look if we have some errors in the conf
-        # Juts print warnings, but raise errors
+        # Juts print(warnings, but raise errors)
         for err in self.configuration_warnings:
             logger.warning("[service::%s] %s", desc, err)
 
@@ -824,6 +851,9 @@ class Service(SchedulingItem):
                     continue
                 value = key_value['VALUE']
                 new_s = self.copy()
+                # The copied service is not a duplicate_foreach, but a final
+                # object
+                new_s.duplicate_foreach = ""
                 new_s.host_name = host.get_name()
                 if self.is_tpl():  # if template, the new one is not
                     new_s.register = 1
@@ -988,9 +1018,10 @@ class Service(SchedulingItem):
 
     # The last time when the state was not OK
     def last_time_non_ok_or_up(self):
-        non_ok_times = filter(lambda x: x > self.last_time_ok, [self.last_time_warning,
-                                                                self.last_time_critical,
-                                                                self.last_time_unknown])
+        non_ok_times = list(filter(
+            lambda x: x > self.last_time_ok,
+            [self.last_time_warning, self.last_time_critical, self.last_time_unknown]
+        ))
         if len(non_ok_times) == 0:
             last_time_non_ok = 0  # program_start would be better
         else:
@@ -999,11 +1030,15 @@ class Service(SchedulingItem):
 
     # Add a log entry with a SERVICE ALERT like:
     # SERVICE ALERT: server;Load;UNKNOWN;HARD;1;I don't know what to say...
-    def raise_alert_log_entry(self):
-        naglog_result('critical', 'SERVICE ALERT: %s;%s;%s;%s;%d;%s'
-                                  % (self.host.get_name(), self.get_name(),
-                                     self.state, self.state_type,
-                                     self.attempt, self.output))
+    def raise_alert_log_entry(self, check_variant=None):
+        if check_variant is None:
+            naglog_result('critical', 'SERVICE ALERT: %s;%s;%s;%s;%d;%s' % (
+                self.host.get_name(), self.get_name(), self.state,
+                self.state_type, self.attempt, self.output))
+        elif check_variant == "maintenance":
+            naglog_result('critical', 'SERVICE MAINTENANCE ALERT: %s;%s;%s;%s' % (
+                self.host.get_name(), self.get_name(), self.maintenance_state,
+                self.maintenance_check_output))
 
     # If the configuration allow it, raise an initial log like
     # CURRENT SERVICE STATE: server;Load;UNKNOWN;HARD;1;I don't know what to say...
@@ -1204,11 +1239,11 @@ class Service(SchedulingItem):
                 return True
             if self.state == 'OK' and 'r' not in self.notification_options:
                 return True
-        if (type in ('FLAPPINGSTART', 'FLAPPINGSTOP', 'FLAPPINGDISABLED')
-                and 'f' not in self.notification_options):
+        if (type in ('FLAPPINGSTART', 'FLAPPINGSTOP', 'FLAPPINGDISABLED') and
+                'f' not in self.notification_options):
             return True
-        if (type in ('DOWNTIMESTART', 'DOWNTIMEEND', 'DOWNTIMECANCELLED')
-                and 's' not in self.notification_options):
+        if (type in ('DOWNTIMESTART', 'DOWNTIMEEND', 'DOWNTIMECANCELLED') and
+                's' not in self.notification_options):
             return True
 
         # Acknowledgements make no sense when the status is ok/up
@@ -1348,7 +1383,9 @@ class Services(Items):
             mesg = "a %s has been defined without host_name nor " \
                    "hostgroups%s" % (objcls, in_file)
             item.configuration_errors.append(mesg)
-        if index is True:
+        # Do not index `duplicate_foreach` services, they have to be expanded
+        # during `explode` phase, similarly to what's done with templates
+        if index is True and not item.is_duplicate():
             if hname and sdesc:
                 item = self.index_item(item)
             else:
@@ -1360,8 +1397,8 @@ class Services(Items):
 
     # Inheritance for just a property
     def apply_partial_inheritance(self, prop):
-        for i in itertools.chain(self.items.itervalues(),
-                                 self.templates.itervalues()):
+        for i in itertools.chain(self.items.values(),
+                                 self.templates.values()):
             i.get_property_by_inheritance(prop, 0)
             # If a "null" attribute was inherited, delete it
             try:
@@ -1379,21 +1416,21 @@ class Services(Items):
         cls = self.inner_class
         for prop in cls.properties:
             self.apply_partial_inheritance(prop)
-        for i in itertools.chain(self.items.itervalues(),
-                                 self.templates.itervalues()):
+        for i in itertools.chain(self.items.values(),
+                                 self.templates.values()):
             i.get_customs_properties_by_inheritance(0)
 
 
     def linkify_templates(self):
         # First we create a list of all templates
-        for i in itertools.chain(self.items.itervalues(),
-                                 self.templates.itervalues()):
+        for i in itertools.chain(self.items.values(),
+                                 self.templates.values()):
             self.linkify_item_templates(i)
 
         # Then we set the tags issued from the built templates
         # for i in self:
-        for i in itertools.chain(self.items.itervalues(),
-                                 self.templates.itervalues()):
+        for i in itertools.chain(self.items.values(),
+                                 self.templates.values()):
             i.tags = self.get_all_tags(i)
 
 
@@ -1423,11 +1460,13 @@ class Services(Items):
         self.linkify_with_timeperiods(timeperiods, 'check_period')
         self.linkify_with_timeperiods(timeperiods, 'maintenance_period')
         self.linkify_with_timeperiods(timeperiods, 'snapshot_period')
+        self.linkify_with_timeperiods(timeperiods, 'maintenance_check_period')
         self.linkify_s_by_hst(hosts)
         self.linkify_s_by_sg(servicegroups)
         self.linkify_one_command_with_commands(commands, 'check_command')
         self.linkify_one_command_with_commands(commands, 'event_handler')
         self.linkify_one_command_with_commands(commands, 'snapshot_command')
+        self.linkify_one_command_with_commands(commands, 'maintenance_check_command')
         self.linkify_with_contacts(contacts)
         self.linkify_with_resultmodulations(resultmodulations)
         self.linkify_with_business_impact_modulations(businessimpactmodulations)
@@ -1467,10 +1506,10 @@ class Services(Items):
                 # Looks for corresponding services
                 services = self.get_ovr_services_from_expression(host, sdescr)
                 if not services:
-                    err = "Error: trying to override property '%s' on " \
+                    err = "Warn: trying to override property '%s' on " \
                           "service identified by '%s' " \
                           "but it's unknown for this host" % (prop, sdescr)
-                    host.configuration_errors.append(err)
+                    host.configuration_warnings.append(err)
                     continue
                 value = Service.properties[prop].pythonize(value)
                 for service in services:
@@ -1526,7 +1565,7 @@ class Services(Items):
                           (self.get_name(), hst_name)
                     s.configuration_warnings.append(err)
                     continue
-            except AttributeError, exp:
+            except AttributeError as exp:
                 pass  # Will be catch at the is_correct moment
 
     # We look for servicegroups property in services and
@@ -1549,7 +1588,8 @@ class Services(Items):
     # In the scheduler we need to relink the commandCall with
     # the real commands
     def late_linkify_s_by_commands(self, commands):
-        props = ['check_command', 'event_handler', 'snapshot_command']
+        props = ['check_command', 'maintenance_check_command',
+                 'event_handler', 'snapshot_command']
         for s in self:
             for prop in props:
                 cc = getattr(s, prop, None)
@@ -1662,10 +1702,7 @@ class Services(Items):
         new_s = service.copy()
         new_s.host_name = host_name
         new_s.register = 1
-        if new_s.is_duplicate():
-            self.add_item(new_s, index=False)
-        else:
-            self.add_item(new_s)
+        self.add_item(new_s)
         return new_s
 
 
@@ -1795,17 +1832,9 @@ class Services(Items):
             self.explode_contact_groups_into_contacts(t, contactgroups)
             self.explode_services_from_templates(hosts, t)
 
-        # Explode services that have a duplicate_foreach clause
-        duplicates = [s.id for s in self if s.is_duplicate()]
-        for id in duplicates:
-            s = self.items[id]
-            self.explode_services_duplicates(hosts, s)
-            if not s.configuration_errors:
-                self.remove_item(s)
-
         # Then for every host create a copy of the service with just the host
         # because we are adding services, we can't just loop in it
-        for s in self.items.values():
+        for s in list(self.items.values()):
             # items::explode_host_groups_into_hosts
             # take all hosts from our hostgroup_name into our host_name property
             self.explode_host_groups_into_hosts(s, hosts, hostgroups)
@@ -1820,13 +1849,22 @@ class Services(Items):
             # We will duplicate if we have multiple host_name
             # or if we are a template (so a clean service)
             if len(hnames) == 1:
-                self.index_item(s)
+                if not s.is_duplicate():
+                    self.index_item(s)
             else:
                 if len(hnames) >= 2:
                     self.explode_services_from_hosts(hosts, s, hnames)
                 # Delete expanded source service
                 if not s.configuration_errors:
                     self.remove_item(s)
+
+        # Explode services that have a duplicate_foreach clause
+        duplicates = [s.id for s in self if s.is_duplicate()]
+        for id in duplicates:
+            s = self.items[id]
+            self.explode_services_duplicates(hosts, s)
+            if not s.configuration_errors:
+                self.remove_item(s)
 
         to_remove = []
         for service in self:

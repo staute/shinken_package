@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Copyright (C) 2009-2014:
 #    Gabes Jean, naparuba@gmail.com
@@ -63,13 +63,12 @@ curpath=$(cd $(dirname "$0") && pwd)
 #echo curpath is $curpath filename is $(basename "$0")
 
 ## Default paths:
-test "$BIN" || BIN=$(cd $curpath/.. && pwd)
 test "$VAR" || VAR=$(cd $curpath/../../var && pwd)
 test "$ETC" || ETC=$(cd $curpath/../../etc && pwd)
 
 export PATH="${PATH:+$PATH:}/usr/sbin:/bin:/sbin"
-export LANG=en_US.UTF8
-export LC_ALL=en_US.UTF8
+export LANG=en_US.UTF8    2>/dev/null
+export LC_ALL=en_US.UTF8  2>/dev/null
 export PYTHONIOENCODING=utf8
 export PYTHONUNBUFFERED="0"
 export TZ=:/etc/localtime
@@ -77,51 +76,13 @@ export TZ=:/etc/localtime
 unset http_proxy
 unset https_proxy
 
-# We try to find the LAST possible Python VERSION
-pythonver() {
-    versions="2.4 2.5 2.6 2.7"
-    LASTFOUND=""
-    # Is there any python here?
-    for v in $versions
-    do
-        which python$v > /dev/null 2>&1
-        if [ $? -eq 0 ]
-        then
-            LASTFOUND="python$v"
-        fi
-    done
-    if [ -z "$LASTFOUND" ]
-    then
-        # Finaly try to find a default python
-        which python > /dev/null 2>&1
-        if [ $? -ne 0 ]
-        then
-            echo "No python interpreter found!"
-            exit 2
-        else
-            echo "python found"
-            LASTFOUND=$(which python)
-        fi
-    fi
-    PYTHON=$LASTFOUND
-}
-
-# Ok, go search this Python version
-pythonver
-
-# Uncomment the line below if you got the **lib** shinken installed
-# on a non standard place (not in /usr/lib/python*)
-#export PYTHONPATH="${PATH:+$PATH:}/opt/shinken"
-# Or uncommentif you want to force the Python version
-#export PYTHON=python2.7
-
 # default
 DEBUG=false
 CMD=""
 SUBMODULES=""
 
 ## This permits to overhidde the default "default shinken cfg file":
-[ -z "$SHINKEN_DEFAULT_FILE" ] && SHINKEN_DEFAULT_FILE="/etc/default/$NAME"
+[ -z "$SHINKEN_DEFAULT_FILE" ] && SHINKEN_DEFAULT_FILE="$DEFAULT$/$NAME"
 ## so you can now do:
 ## bash -c "SHINKEN_DEFAULT_FILE=$your_own_default_file $init_path/shinken $action $args"
 ## to easily use your own config
@@ -183,26 +144,71 @@ fi
 # happy for opening its pid and cmd files
 cd $VAR
 
-#echo BIN=$BIN
 #echo VAR=$VAR
 #echo ETC=$ETC
 
 #set -xv
 
 
-echo_success() {
-   log_end_msg 0 $*
+
+# Have a special started output to show that we did launch but it's not currently finished yet
+echo_started() {
+  RES_COL=60
+  MOVE_TO_COL="echo -en \\033[${RES_COL}G"
+  SETCOLOR_SUCCESS="echo -en \\033[32m"
+  SETCOLOR_NORMAL="echo -en \\033[0;39m"
+  $MOVE_TO_COL
+  echo -n "["
+  $SETCOLOR_SUCCESS
+  echo -n $"√ OK"
+  $SETCOLOR_NORMAL
+  echo -n "]"
+  printf "\n"
+  return 0
 }
 
-echo_failure() {
-    log_end_msg 1 $*
+
+# Have a special started output to show that we did launch but it's not currently finished yet
+echo_already_started() {
+  RES_COL=60
+  MOVE_TO_COL="echo -en \\033[${RES_COL}G"
+  SETCOLOR_WARNING="echo -en \\033[33m"
+  SETCOLOR_NORMAL="echo -en \\033[0;39m"
+  $MOVE_TO_COL
+  echo -n "["
+  $SETCOLOR_WARNING
+  echo -n $"‼ WARNING: Already running"
+  $SETCOLOR_NORMAL
+  echo -n "]"
+  printf "\n"
+  return 0
 }
 
-#log_end_msg
+# Have a special started output to show that we did launch but it's not currently finished yet
+echo_failed() {
+  error_msg="$1"
+  RES_COL=60
+  MOVE_TO_COL="echo -en \\033[${RES_COL}G"
+  SETCOLOR_ERROR="echo -en \\033[31m"
+  SETCOLOR_NORMAL="echo -en \\033[0;39m"
+  $MOVE_TO_COL
+  echo -n "["
+  $SETCOLOR_ERROR
+  echo -n $"Х ERROR"
+  $SETCOLOR_NORMAL
+  echo -n "]"
+  echo ""
+  $SETCOLOR_ERROR
+  echo $error_msg
+  $SETCOLOR_NORMAL
+  printf "\n"
+  return 0
+}
+
 
 
 # Load the VERBOSE setting and other rcS variables
-[ -f /etc/default/rcS ] && . /etc/default/rcS
+[ -f $DEFAULT$/rcS ] && . $DEFAULT$/rcS
 
 # Source function library.
 [ -f /etc/rc.d/init.d/functions ] && . /etc/rc.d/init.d/functions
@@ -237,6 +243,12 @@ getmodpid() {
     fi
 }
 
+getallpipds() {
+    mod_pid=$1
+    ps -aeo pid,ppid,args | \
+    awk "\$1 == ${mod_pid} || \$2 == ${mod_pid} {print \$1}"
+}
+
 
 getdebugfile() {
     mod="$1"
@@ -269,10 +281,10 @@ do_status() {
         echo "$mod NOT RUNNING (pid file empty)"
         return 4
     fi
-    ps -p "$pid" >/dev/null 2>&1
+    kill -0 "$pid" >/dev/null 2>&1
     rc=$?
     if [ $rc != 0 ]; then
-        log_failure_msg  "$mod NOT RUNNING (process $pid doesn't exist?)"
+        echo_failed  "$mod NOT RUNNING (process $pid doesn't exist?)"
         return 1
     fi
     echo "$mod RUNNING (pid $pid)"
@@ -284,24 +296,24 @@ do_status() {
 #
 do_start() {
     mod=$1
-    modfilepath="$BIN/shinken-${mod}"
-    [ -e "$modfilepath" ] || {
-        log_failure_msg "FAILED: did not find $mod file ($modfilepath) ; are you sure shinken-$mod is installed?"
+    modfilepath="$BIN$/shinken-${mod}"
+	if [ -z "$(which $modfilepath)" ]; then
+        echo_failed "FAILED: did not find $mod file ($modfilepath) ; are you sure shinken-$mod is installed?"
         return 5
-    }
+	fi
     [ "$DEBUG" = 1 ] && DEBUGCMD="--debug "$(getdebugfile "$mod")
     # Arbiter shinken.cfg, and the other OTHERd.ini
     if [ "$mod" != "arbiter" ]; then
         modINI=$(echo "$"${mod}CFG | tr '[:lower:]' '[:upper:]')
         modinifile=$(eval echo ${modINI})
-        output=$($PYTHON "$modfilepath" -d -c "${modinifile}" $DEBUGCMD 2>&1)
+        output=$($modfilepath -d -c "${modinifile}" $DEBUGCMD 2>&1)
         rc=$?
     else
         if ! test "$SHINKENSPECIFICCFG"
         then
-            output=$($PYTHON "$modfilepath" -d -c "$SHINKENCFG" $DEBUGCMD 2>&1)
+            output=$($modfilepath -d -c "$SHINKENCFG" $DEBUGCMD 2>&1)
         else
-            output=$($PYTHON "$modfilepath" -d -c "$SHINKENCFG" -c "$SHINKENSPECIFICCFG" $DEBUGCMD 2>&1)
+            output=$($modfilepath -d -c "$SHINKENCFG" -c "$SHINKENSPECIFICCFG" $DEBUGCMD 2>&1)
         fi
         rc=$?
     fi
@@ -337,7 +349,7 @@ do_stop() {
         for i in 1 2 3
         do
             # TODO: use a better way to get the children pids..
-            allpids="$(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}')"
+            allpids=$(getallpids $pid)
             if [ -z "$allpids" ]; then
                 echo "OK"
                 return 0
@@ -345,14 +357,14 @@ do_stop() {
             sleep 1
         done
         echo "there are still remaining processes to $mod running.. ; trying to kill them (SIGTERM).."
-        allpids="$(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}')"
-        for cpid in $(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}'); do
+        allpids=$(getallpids $pid)
+        for cpid in $allpids; do
             kill $cpid > /dev/null 2>&1
         done
         for i in 1 2 3
         do
             # TODO: eventually use a better way to get the children pids..
-            allpids="$(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}')"
+            allpids=$(getallpids $pid)
             if [ -z "$allpids" ]; then
                 echo "OK"
                 return 0
@@ -360,16 +372,15 @@ do_stop() {
             sleep 1
         done
         echo "there are still remaining processes to $mod running.. ; trying to kill -9 them.."
-        allpids="$(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}')"
-        for cpid in $(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}'); do
+        allpids=$(getallpids $pid)
+        for cpid in $allpids; do
             kill -9 $cpid > /dev/null 2>&1
         done
         sleep 1
-        allpids="$(ps -aef | grep "$pid" | grep "shinken-$mod" | awk '{print $2}')"
+        allpids=$(getallpids $pid)
         if [ ! -z "$allpids" ]; then
             echo "FAILED: one or more process for $mod are still running after kill -9!"
             echo "Remaining processes are (pids="$allpids"):"
-            ps -lf $(for p in $allpids ; do echo -n "-p$p " ; done)
             echo "You should check this."
             return 1
         fi
@@ -387,9 +398,9 @@ do_check() {
     [ "$DEBUG" = 1 ] && DEBUGCMD="--debug $VAR/${mod}-debug.log"
     if ! test "$SHINKENSPECIFICCFG"
     then
-       $PYTHON "$BIN/shinken-arbiter" -v -c "$SHINKENCFG" $DEBUGCMD 2>&1
+       shinken-arbiter -v -c "$SHINKENCFG" $DEBUGCMD 2>&1
     else
-       $PYTHON "$BIN/shinken-arbiter" -v -c "$SHINKENCFG" -c "$SHINKENSPECIFICCFG" $DEBUGCMD 2>&1
+       shinken-arbiter -v -c "$SHINKENCFG" -c "$SHINKENSPECIFICCFG" $DEBUGCMD 2>&1
     fi
     return $?
 }
@@ -402,7 +413,7 @@ do_start_() {
     status=$(do_status "$1")
     rc=$?
     if [ $rc -eq 0 ]; then
-        log_warning_msg "Already running"
+        echo_already_started
         return
     fi
     if test "$1" = "arbiter"
@@ -420,10 +431,9 @@ do_start_() {
     startoutput=$(do_start "$1")
     rc=$?
     if [ $rc -eq 0 ]; then
-        echo_success
+        echo_started
     else
-        echo "$startoutput"
-        echo_failure
+        echo_failed "$startoutput"
     fi
     return $rc
 }
@@ -440,10 +450,9 @@ do_stop_() {
         [ $rc -ne 0 ] && failuremsg="Couldn't stop $1: $stopoutput"
     fi
     if [ $rc -ne 0 ]; then
-        log_failure_msg "$failuremsg"
-        echo_failure
+        echo_failed "$failuremsg"
     else
-        echo_success
+        echo_started
     fi
     return $rc
 }
@@ -462,10 +471,9 @@ do_restart_() {
     startoutput=$(do_start "$mod")
     rc=$?
     if [ $rc -eq 0 ]; then
-        echo_success
+        echo_started
     else
-        log_failure_msg "$startoutput"
-        echo_failure
+        echo_failed "$startoutput"
     fi
     return $rc
 }
@@ -488,10 +496,9 @@ do_reload_() {
     startoutput=$(do_start "$mod")
     rc=$?
     if [ $rc -eq 0 ]; then
-        echo_success
+        echo_started
     else
-        log_failure_msg "$startoutput"
-        echo_failure
+        echo_failed "$startoutput"
     fi
     return $rc
 }
@@ -502,9 +509,9 @@ do_status_() {
     do_status "$1"
     rc=$?
     if [ $rc -eq 0 ]; then
-        echo_success
+        echo_started
     else
-        echo_failure
+        echo_failed
     fi
 
 }
@@ -519,12 +526,11 @@ do_check_() {
     check_res_file="/tmp/shinken_checkconfig_result"
 
     if [ $rc -eq 0 ]; then
-        echo_success
+        echo_started
     else
         output=$(echo "$output" | tail -1)
         log_warning_msg "full result is in ${check_res_file}"
-        log_failure_msg "ConfigCheck failed: $output"
-        echo_failure
+        echo_failed "ConfigCheck failed: $output"
     fi
     return $rc
 }

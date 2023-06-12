@@ -28,11 +28,14 @@ to look at the schedulingitem class that manage all
 scheduling/consume check smart things :)
 """
 
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import six
 import time
 import itertools
 
-from item import Items
-from schedulingitem import SchedulingItem
+from shinken.objects.item import Items
+from shinken.objects.schedulingitem import SchedulingItem
 
 from shinken.autoslots import AutoSlots
 from shinken.util import (format_t_into_dhms_format, to_hostnames_list, get_obj_name,
@@ -46,10 +49,7 @@ from shinken.log import logger, naglog_result
 
 import uuid
 
-class Host(SchedulingItem):
-    # AutoSlots create the __slots__ with properties and
-    # running_properties names
-    __metaclass__ = AutoSlots
+class Host(six.with_metaclass(AutoSlots, SchedulingItem)):
 
     id = 1  # zero is reserved for host (primary node for parents)
     ok_up = 'UP'
@@ -188,9 +188,6 @@ class Host(SchedulingItem):
             ListProp(default=[], merging='join'),
         'escalations':
             ListProp(default=[], fill_brok=['full_status'], merging='join', split_on_coma=True),
-        'maintenance_period':
-            StringProp(default='', brok_transformation=to_name_if_possible,
-                       fill_brok=['full_status']),
         'time_to_orphanage':
             IntegerProp(default=300, fill_brok=['full_status']),
         'service_overrides':
@@ -256,6 +253,20 @@ class Host(SchedulingItem):
         'snapshot_interval':
             IntegerProp(default=5),
 
+        # Maintenance part
+        'maintenance_check_command':
+            StringProp(default='', fill_brok=['full_status']),
+        'maintenance_period':
+            StringProp(default='', brok_transformation=to_name_if_possible, fill_brok=['full_status']),
+        'maintenance_checks_enabled':
+            BoolProp(default=False, fill_brok=['full_status']),
+        'maintenance_check_period':
+            StringProp(default='', brok_transformation=to_name_if_possible, fill_brok=['full_status']),
+        'maintenance_check_interval':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result']),
+        'maintenance_retry_interval':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result']),
+
         # Check/notification priority
         'priority':
             IntegerProp(default=100, fill_brok=['full_status']),
@@ -266,13 +277,11 @@ class Host(SchedulingItem):
     running_properties = SchedulingItem.running_properties.copy()
     running_properties.update({
         'modified_attributes':
-            IntegerProp(default=0L, fill_brok=['full_status'], retention=True),
+            IntegerProp(default=0, fill_brok=['full_status'], retention=True),
         'last_chk':
             IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
         'next_chk':
             IntegerProp(default=0, fill_brok=['full_status', 'next_schedule'], retention=True),
-        'in_checking':
-            BoolProp(default=False, fill_brok=['full_status', 'check_result', 'next_schedule']),
         'in_maintenance':
             IntegerProp(default=None, fill_brok=['full_status'], retention=True),
         'latency':
@@ -348,7 +357,7 @@ class Host(SchedulingItem):
 
         # No broks, it's just internal, and checks have too links
         'checks_in_progress':
-            StringProp(default=[]),
+            ListProp(default=[]),
 
         # No broks, it's just internal, and checks have too links
         'notifications_in_progress':
@@ -367,7 +376,7 @@ class Host(SchedulingItem):
             FloatProp(default=0.0, fill_brok=['full_status', 'check_result'], retention=True),
 
         'problem_has_been_acknowledged':
-            BoolProp(default=False, fill_brok=['full_status', 'check_result'], retention=True),
+            BoolProp(default=False, fill_brok=['full_status', 'check_result']),
 
         'acknowledgement':
             StringProp(default=None, retention=True),
@@ -412,7 +421,7 @@ class Host(SchedulingItem):
             BoolProp(default=True, fill_brok=['full_status'], retention=True),
 
         'scheduled_downtime_depth':
-            IntegerProp(default=0, fill_brok=['full_status'], retention=True),
+            IntegerProp(default=0, fill_brok=['full_status']),
 
         'pending_flex_downtime':
             IntegerProp(default=0, fill_brok=['full_status'], retention=True),
@@ -452,7 +461,7 @@ class Host(SchedulingItem):
             StringProp(default=set(), retention=True, retention_preparation=to_list_of_names),
 
         'in_scheduled_downtime':
-            BoolProp(default=False, fill_brok=['full_status', 'check_result'], retention=True),
+            BoolProp(default=False, fill_brok=['full_status', 'check_result']),
 
         'in_scheduled_downtime_during_last_check':
             BoolProp(default=False, retention=True),
@@ -563,6 +572,24 @@ class Host(SchedulingItem):
 
         # Keep the string of the last command launched for this element
         'last_check_command': StringProp(default=''),
+
+        # Maintenance states: PRODUCTION (0), MAINTENANCE (1), UNKNOWN (2)
+        'last_maintenance_chk':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'next_maintenance_chk':
+            IntegerProp(default=0, fill_brok=['full_status', 'next_schedule'], retention=True),
+        'maintenance_check_output':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'maintenance_state':
+            StringProp(default='PENDING', fill_brok=['full_status', 'check_result'], retention=True),
+        'maintenance_state_id':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state':
+            StringProp(default='PENDING', fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state_id':
+            IntegerProp(default=0, fill_brok=['full_status', 'check_result'], retention=True),
+        'last_maintenance_state_change':
+            FloatProp(default=0.0, fill_brok=['full_status', 'check_result'], retention=True),
     })
 
     # Hosts macros and prop that give the information
@@ -697,7 +724,7 @@ class Host(SchedulingItem):
                     state = False  # Bad boy...
 
         # Then look if we have some errors in the conf
-        # Juts print warnings, but raise errors
+        # Juts print(warnings, but raise errors)
         for err in self.configuration_warnings:
             logger.warning("[host::%s] %s", self.get_name(), err)
 
@@ -788,7 +815,7 @@ class Host(SchedulingItem):
         for hg in self.hostgroups:
             # naglog_result('info', 'get_groupname : %s %s %s' % (hg.id, hg.alias, hg.get_name()))
             # groupname = "%s [%s]" % (hg.alias, hg.get_name())
-            groupname = "%s" % (hg.alias)
+            groupname = hg.alias
         return groupname
 
 
@@ -932,7 +959,7 @@ class Host(SchedulingItem):
                     fct = get_exclude_match_expr(d)
                     if fct(sdesc):
                         incl = True
-                except Exception, e:
+                except Exception as e:
                     self.configuration_errors.append(
                         "Invalid include expression: %s: %s" % (d, e))
             return not incl
@@ -942,7 +969,7 @@ class Host(SchedulingItem):
                     fct = get_exclude_match_expr(d)
                     if fct(sdesc):
                         return True
-                except Exception, e:
+                except Exception as e:
                     self.configuration_errors.append(
                         "Invalid exclude expression: %s: %s" % (d, e))
         return False
@@ -1066,11 +1093,18 @@ class Host(SchedulingItem):
 
     # Add a log entry with a HOST ALERT like:
     # HOST ALERT: server;DOWN;HARD;1;I don't know what to say...
-    def raise_alert_log_entry(self):
-        naglog_result('critical',
-                      'HOST ALERT: %s;%s;%s;%d;%s' % (self.get_name(),
-                                                      self.state, self.state_type,
-                                                      self.attempt, self.output))
+    def raise_alert_log_entry(self, check_variant=None):
+        if check_variant is None:
+            check_variant = SchedulingItem.default_check_variant
+
+        if check_variant == SchedulingItem.default_check_variant:
+            naglog_result('critical', 'HOST ALERT: %s;%s;%s;%d;%s' % (
+                self.get_name(), self.state, self.state_type, self.attempt,
+                self.output))
+        elif check_variant == "maintenance":
+            naglog_result('critical', 'HOST MAINTENANCE ALERT: %s;%s;%s' % (
+                self.get_name(), self.maintenance_state,
+                self.maintenance_check_output))
 
 
     # If the configuration allow it, raise an initial log like
@@ -1299,11 +1333,11 @@ class Host(SchedulingItem):
                 return True
             if self.state == 'UNREACHABLE' and 'u' not in self.notification_options:
                 return True
-        if (type in ('FLAPPINGSTART', 'FLAPPINGSTOP', 'FLAPPINGDISABLED')
-                and 'f' not in self.notification_options):
+        if (type in ('FLAPPINGSTART', 'FLAPPINGSTOP', 'FLAPPINGDISABLED') and
+                'f' not in self.notification_options):
             return True
-        if (type in ('DOWNTIMESTART', 'DOWNTIMEEND', 'DOWNTIMECANCELLED')
-                and 's' not in self.notification_options):
+        if (type in ('DOWNTIMESTART', 'DOWNTIMEEND', 'DOWNTIMECANCELLED') and
+                's' not in self.notification_options):
             return True
 
         # Acknowledgements make no sense when the status is ok/up
@@ -1446,11 +1480,13 @@ class Hosts(Items):
         self.linkify_with_timeperiods(timeperiods, 'check_period')
         self.linkify_with_timeperiods(timeperiods, 'maintenance_period')
         self.linkify_with_timeperiods(timeperiods, 'snapshot_period')
+        self.linkify_with_timeperiods(timeperiods, 'maintenance_check_period')
         self.linkify_h_by_h()
         self.linkify_h_by_hg(hostgroups)
         self.linkify_one_command_with_commands(commands, 'check_command')
         self.linkify_one_command_with_commands(commands, 'event_handler')
         self.linkify_one_command_with_commands(commands, 'snapshot_command')
+        self.linkify_one_command_with_commands(commands, 'maintenance_check_command')
 
         self.linkify_with_contacts(contacts)
         self.linkify_h_by_realms(realms)
@@ -1484,7 +1520,7 @@ class Hosts(Items):
                 else:
                     err = "the parent '%s' on host '%s' is unknown!" % (parent, h.get_name())
                     self.configuration_warnings.append(err)
-            # print "Me,", h.host_name, "define my parents", new_parents
+            # print("Me,", h.host_name, "define my parents", new_parents)
             # We find the id, we replace the names
             h.parents = new_parents
 
@@ -1496,7 +1532,7 @@ class Hosts(Items):
             if getattr(r, 'default', False):
                 default_realm = r
         # if default_realm is None:
-        #    print "Error: there is no default realm defined!"
+        #    print("Error: there is no default realm defined!")
         for h in self:
             if h.realm is not None:
                 p = realms.find_by_name(h.realm.strip())
@@ -1536,7 +1572,7 @@ class Hosts(Items):
         # items::explode_trigger_string_into_triggers
         self.explode_trigger_string_into_triggers(triggers)
 
-        for t in self.templates.itervalues():
+        for t in self.templates.values():
             # items::explode_contact_groups_into_contacts
             # take all contacts from our contact_groups into our contact property
             self.explode_contact_groups_into_contacts(t, contactgroups)
@@ -1556,7 +1592,8 @@ class Hosts(Items):
     # In the scheduler we need to relink the commandCall with
     # the real commands
     def late_linkify_h_by_commands(self, commands):
-        props = ['check_command', 'event_handler', 'snapshot_command']
+        props = ['check_command', 'maintenance_check_command', 'event_handler',
+                 'snapshot_command']
         for h in self:
             for prop in props:
                 cc = getattr(h, prop, None)
@@ -1566,7 +1603,7 @@ class Hosts(Items):
             # Ok also link checkmodulations
             for cw in h.checkmodulations:
                 cw.late_linkify_cw_by_commands(commands)
-                print cw
+                print(cw)
 
 
     # Create dependencies:
